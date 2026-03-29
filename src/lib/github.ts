@@ -1,27 +1,47 @@
 import { Octokit } from "octokit";
-import dotenv from "dotenv"
+import dotenv from "dotenv";
 
 dotenv.config();
 
-// single instance of Octokit to use everywhere 
+if (!process.env.GITHUB_TOKEN) {
+    throw new Error("CRITICAL: GITHUB_TOKEN is missing in .env file");
+}
+
 export const octokit = new Octokit({
   auth: process.env.GITHUB_TOKEN,
 });
 
-// Git diff function 
-export async function getPRDiff(owner: string, repo: string, pullNumber: number) {
+
+export async function getPRDiff(owner: string, repo: string, pullNumber: number): Promise<string> {
   try {
-    const { data } = await octokit.rest.pulls.get({
+    const response = await octokit.rest.pulls.get({
       owner,
       repo,
       pull_number: pullNumber,
       mediaType: {
-        format: "diff", // This tells GitHub we want the code changes, not just metadata
+        format: "diff", 
       },
     });
-    return data as unknown as string;
-  } catch (error) {
-    console.error("Error fetching PR diff:", error);
+
+    return response.data as any; 
+  } catch (error: any) {
+    console.error(`Error fetching diff for PR #${pullNumber}:`, error.message);
     throw error;
   }
+}
+
+export async function postPRComment(owner: string, repo: string, pullNumber: number, body: string): Promise<void> {
+    try {
+        await octokit.rest.issues.createComment({
+            owner,
+            repo,
+            issue_number: pullNumber, 
+            body,                     
+        });
+        
+        console.log(`[gitGoblin] Review posted to PR #${pullNumber}`);
+    } catch (error: any) {
+        console.error(`[GitHub Service] Failed to post comment:`, error.message);
+        throw error;
+    }
 }
