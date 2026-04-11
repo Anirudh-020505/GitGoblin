@@ -66,7 +66,7 @@ app.get('/health', (req, res) => {
 });
 
 // The main Webhook listener
-app.post('/webhook', verifyGithubSignature, handleGithubWebhook);
+app.post('/api/webhook', verifyGithubSignature, handleGithubWebhook);
 
 // --- START SERVER ---
 
