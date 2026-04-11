@@ -14,7 +14,7 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 // We use gemini-1.5-flash because it is extremely fast and cost-effective for chat.
 // If you move to full repository analysis later, you would swap this to 'gemini-1.5-pro'
-const CHAT_MODEL = 'gemini-3.1-flash-lite-preview';
+const CHAT_MODEL = "gemini-3.1-flash-lite-preview";
 
 /**
  * Generates a conversational reply for the @GitGoblin mentions using Google Gemini.
