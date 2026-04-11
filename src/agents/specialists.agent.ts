@@ -8,11 +8,7 @@ dotenv.config();
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 const MODEL_NAME = 'gemini-1.5-flash';
 
-/**
- * The Security Agent focuses exclusively on vulnerabilities.
- * * INTERVIEW PREP NOTE: We use prompt engineering to force the AI to return 
- * "LGTM" if there are no issues, rather than making up fake problems.
- */
+
 export const runSecurityAgent = async (diff: string): Promise<string> => {
   try {
     const model = genAI.getGenerativeModel({
@@ -32,9 +28,7 @@ export const runSecurityAgent = async (diff: string): Promise<string> => {
   }
 };
 
-/**
- * The Performance Agent focuses strictly on Big O notation, memory leaks, and speed.
- */
+
 export const runPerformanceAgent = async (diff: string): Promise<string> => {
   try {
     const model = genAI.getGenerativeModel({

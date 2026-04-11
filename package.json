@@ -3,16 +3,23 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "NODE_OPTIONS='--dns-result-order=ipv4first' npx ts-node src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@google/generative-ai": "^0.24.1",
+    "@octokit/auth-app": "^8.2.0",
+    "@octokit/rest": "^22.0.1",
+    "@octokit/webhooks": "^14.2.0",
     "axios": "^1.13.6",
     "dotenv": "^17.3.1",
     "express": "^5.2.1",
+    "ngrok": "^5.0.0-beta.2",
     "octokit": "^5.0.5",
     "openai": "^6.33.0"
   },

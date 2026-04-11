@@ -29,17 +29,14 @@ webhooks.on(["pull_request.opened", "pull_request.synchronize"], async ({ payloa
     await processPullRequestReview(context);
 });
 
-// Chat Workflow
+// Chat Workflow (Comments)
 webhooks.on(["issue_comment.created"], async ({ payload }) => {
-    // Only respond to PR comments (issues also trigger this event, but we focus on PRs)
-    if (!payload.issue.pull_request) return;
-    
     // Ignore bot comments
     if (payload.comment.user?.type === "Bot") return;
 
     // Check if the bot was mentioned
     const body = payload.comment.body;
-    if (!body.includes("@GitGoblin") && !body.includes("@gitgoblin")) return;
+    if (!body.toLowerCase().includes("@gitgoblin")) return;
 
     const context: WebhookContext = {
       installationId: payload.installation?.id || 0,
@@ -48,25 +45,46 @@ webhooks.on(["issue_comment.created"], async ({ payload }) => {
         name: payload.repository.name,
       },
       pullRequest: {
-        number: payload.issue.number,
+        number: payload.issue.number, // Works for both PRs and issues
       }
     };
 
-    console.log(`\n[gitGoblin] Alert! Chat triggered on PR #${context.pullRequest.number} in ${context.repository.name}`);
+    console.log(`\n[gitGoblin] Alert! Chat triggered on Issue/PR #${context.pullRequest.number} in ${context.repository.name}`);
+    await processInteractiveChat(context, body);
+});
+
+// Chat Workflow (New Issues)
+webhooks.on(["issues.opened"], async ({ payload }) => {
+    // Check if the bot was mentioned in the issue description
+    const body = payload.issue.body || "";
+    if (!body.toLowerCase().includes("@gitgoblin")) return;
+
+    const context: WebhookContext = {
+      installationId: payload.installation?.id || 0,
+      repository: {
+        owner: payload.repository.owner.login,
+        name: payload.repository.name,
+      },
+      pullRequest: {
+        number: payload.issue.number, 
+      }
+    };
+
+    console.log(`\n[gitGoblin] Alert! Chat triggered on New Issue #${context.pullRequest.number} in ${context.repository.name}`);
     await processInteractiveChat(context, body);
 });
 
 export const handleGithubWebhook = async (req: Request, res: Response) => {
-    const signature = req.headers["x-hub-signature-256"] as string;
     const id = req.headers["x-github-delivery"] as string;
     const name = req.headers["x-github-event"] as any;
 
     try {
-        await webhooks.verifyAndReceive({
+        // Signature is already verified by verifyGithubSignature middleware.
+        // Just forward the event to our octokit webhook handlers.
+        await webhooks.receive({
             id,
             name,
-            payload: JSON.stringify(req.body),
-            signature: signature || "",
+            payload: req.body,
         });
         
         res.status(200).send("Event Received & Verified");
