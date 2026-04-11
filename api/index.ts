@@ -59,5 +59,12 @@ app.get('/health', (req, res) => {
 // Webhook handler
 app.post('/webhook', verifyGithubSignature, handleGithubWebhook);
 
+// This config is MANDATORY for Vercel to allow raw body access for signatures
+export const config = {
+  api: {
+    bodyParser: false,
+  },
+};
+
 // Export for Vercel
 export default app;
