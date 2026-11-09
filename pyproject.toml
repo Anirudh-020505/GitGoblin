@@ -33,3 +33,9 @@ dev = [
 script_location = "%(here)s/gitgoblin/db/migrations"
 # Date-prefixed files sort in the order they were written.
 file_template = "%%(year)d_%%(month).2d_%%(day).2d-%%(rev)s_%%(slug)s"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Every `async def test_*` runs on its own event loop without a decorator.
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
