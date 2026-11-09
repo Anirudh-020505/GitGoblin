@@ -1,3 +1,25 @@
+# Local stack: `docker compose up --build`
+#
+#   postgres ──healthy──► migrate (alembic upgrade head, then exits)
+#                            └──done──► web    (FastAPI, http://localhost:8000)
+#                            └──done──► worker (python -m gitgoblin.worker)
+#
+# web and worker are the same image with different commands (two process types).
+
+x-app: &app
+  build: .
+  image: gitgoblin:dev
+  # Secrets come from your .env, mounted read-only and read by pydantic-settings at
+  # startup. They never enter the image (.dockerignore excludes .env from builds).
+  volumes:
+    - ./.env:/app/.env:ro
+  environment:
+    # Environment variables beat .env values: inside the network the host is "postgres".
+    DATABASE_URL: postgresql+asyncpg://gitgoblin:gitgoblin@postgres:5432/gitgoblin
+  depends_on:
+    migrate:
+      condition: service_completed_successfully
+
 services:
   postgres:
     image: postgres:17
@@ -15,6 +37,25 @@ services:
       interval: 2s
       timeout: 3s
       retries: 15
+
+  migrate:
+    <<: *app
+    command: ["alembic", "upgrade", "head"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  web:
+    <<: *app
+    ports:
+      - "127.0.0.1:8000:8080"
+
+  worker:
+    <<: *app
+    command: ["python", "-m", "gitgoblin.worker"]
+    # `docker compose stop` sends SIGTERM, then SIGKILL after this long. Give
+    # in-flight reviews time to finish; anything killed is retried via its lease.
+    stop_grace_period: 2m
 
 volumes:
   pgdata:
