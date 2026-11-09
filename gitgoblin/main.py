@@ -11,7 +11,7 @@ import logging
 from fastapi import FastAPI, Request
 from fastapi.responses import PlainTextResponse
 
-from gitgoblin.settings import get_settings
+from gitgoblin.settings import github_settings
 from gitgoblin.webhook import handle_event
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s [%(name)s] %(message)s")
@@ -37,7 +37,7 @@ async def health() -> str:
 async def github_webhook(request: Request) -> PlainTextResponse:
     # Verify against the raw bytes: re-serialized JSON would not match GitHub's signature.
     body = await request.body()
-    secret = get_settings().github_webhook_secret.get_secret_value()
+    secret = github_settings().github_webhook_secret.get_secret_value()
     if not signature_is_valid(secret, body, request.headers.get("x-hub-signature-256")):
         log.warning("Rejected webhook: missing or invalid signature")
         return PlainTextResponse("Unauthorized: invalid signature", status_code=401)
