@@ -1,43 +1,50 @@
-"""Route verified GitHub webhook events to workflows.
+"""Decide what work a verified GitHub webhook asks for. Pure: no network, no database.
 
-Work is awaited before responding: on serverless hosts the function is frozen once the
-response is sent, so fire-and-forget work would be killed.
+    pull_request  opened/synchronize/reopened  → review_pull_request job
+    issue_comment created, mentions us, human  → reply_to_mention job
+    anything else                              → Ignored("why")
 """
 
+from dataclasses import dataclass
 from typing import Any
 
-from gitgoblin.mentions import is_mentioned, reply_to_mention
-from gitgoblin.models import WebhookContext
-from gitgoblin.review import review_pull_request
+from gitgoblin.jobs import JobKind, JobSpec
+from gitgoblin.mentions import is_mentioned
 
-REVIEW_ACTIONS = {"opened", "synchronize"}
-
-
-def _context(payload: dict[str, Any], number: int) -> WebhookContext:
-    return WebhookContext(
-        installation_id=(payload.get("installation") or {}).get("id", 0),
-        owner=payload["repository"]["owner"]["login"],
-        repo=payload["repository"]["name"],
-        number=number,
-    )
+REVIEW_ACTIONS = {"opened", "synchronize", "reopened"}
 
 
-async def handle_event(event: str, payload: dict[str, Any]) -> str:
-    """Process one event; returns a short status message for the webhook response."""
+@dataclass(frozen=True)
+class Ignored:
+    reason: str
+
+
+def _target(payload: dict[str, Any], number: int) -> dict[str, Any]:
+    """The fields every job needs to talk to GitHub about one PR/issue."""
+    return {
+        "installation_id": (payload.get("installation") or {}).get("id", 0),
+        "owner": payload["repository"]["owner"]["login"],
+        "repo": payload["repository"]["name"],
+        "number": number,
+    }
+
+
+def plan_job(event: str, payload: dict[str, Any]) -> JobSpec | Ignored:
     action = payload.get("action")
 
-    if event == "pull_request" and action in REVIEW_ACTIONS:
-        await review_pull_request(_context(payload, payload["pull_request"]["number"]))
-        return "Pull request reviewed"
+    if event == "pull_request":
+        if action not in REVIEW_ACTIONS:
+            return Ignored(f"pull_request action '{action}' does not trigger a review")
+        return JobSpec(JobKind.REVIEW_PULL_REQUEST, _target(payload, payload["pull_request"]["number"]))
 
     if event == "issue_comment" and action == "created":
         comment = payload["comment"]
         if (comment.get("user") or {}).get("type") == "Bot":
-            return "Ignored bot comment"
+            return Ignored("Comment is from a bot")
         body = comment.get("body") or ""
         if not is_mentioned(body):
-            return "No mention detected"
-        await reply_to_mention(_context(payload, payload["issue"]["number"]), comment["id"], body)
-        return "Mention answered"
+            return Ignored("No mention detected")
+        target = _target(payload, payload["issue"]["number"])
+        return JobSpec(JobKind.REPLY_TO_MENTION, {**target, "comment_id": comment["id"], "body": body})
 
-    return "Event ignored"
+    return Ignored(f"Event '{event}' is not handled")

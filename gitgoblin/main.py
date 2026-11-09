@@ -1,5 +1,8 @@
 """HTTP entrypoint: health check and HMAC-verified GitHub webhook.
 
+The webhook never does the slow work itself. It verifies, records the delivery, queues
+a job, and answers in milliseconds; `python -m gitgoblin.worker` runs the job.
+
 Local: `uv run uvicorn gitgoblin.main:app --reload --port 8080`
 """
 
@@ -7,12 +10,16 @@ import hashlib
 import hmac
 import json
 import logging
+from typing import Annotated
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.responses import PlainTextResponse
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from gitgoblin.db.session import get_session
+from gitgoblin.queue import enqueue, record_delivery
 from gitgoblin.settings import github_settings
-from gitgoblin.webhook import handle_event
+from gitgoblin.webhook import Ignored, plan_job
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s [%(name)s] %(message)s")
 log = logging.getLogger("gitgoblin")
@@ -34,7 +41,9 @@ async def health() -> str:
 
 
 @app.post("/api/webhook", response_class=PlainTextResponse)
-async def github_webhook(request: Request) -> PlainTextResponse:
+async def github_webhook(
+    request: Request, session: Annotated[AsyncSession, Depends(get_session)]
+) -> PlainTextResponse:
     # Verify against the raw bytes: re-serialized JSON would not match GitHub's signature.
     body = await request.body()
     secret = github_settings().github_webhook_secret.get_secret_value()
@@ -42,10 +51,22 @@ async def github_webhook(request: Request) -> PlainTextResponse:
         log.warning("Rejected webhook: missing or invalid signature")
         return PlainTextResponse("Unauthorized: invalid signature", status_code=401)
 
+    # GitHub's unique id for this delivery; identical on redelivery.
+    delivery_id = request.headers.get("x-github-delivery")
+    if not delivery_id:
+        return PlainTextResponse("Missing X-GitHub-Delivery header", status_code=400)
     event = request.headers.get("x-github-event", "")
-    try:
-        status = await handle_event(event, json.loads(body))
-    except Exception:
-        log.exception("Failed to process %s event", event)
-        return PlainTextResponse("Internal processing error", status_code=500)
-    return PlainTextResponse(status)
+    payload = json.loads(body)
+    plan = plan_job(event, payload)
+
+    # One transaction: the delivery row and its job are saved together or not at all.
+    async with session.begin():
+        if not await record_delivery(session, delivery_id, event, payload):
+            log.info("Duplicate delivery %s ignored", delivery_id)
+            return PlainTextResponse("Duplicate delivery ignored")
+        if isinstance(plan, Ignored):
+            return PlainTextResponse(plan.reason)
+        job_id = await enqueue(session, plan, delivery_id)
+
+    log.info("Delivery %s (%s) queued as job %d [%s]", delivery_id, event, job_id, plan.kind)
+    return PlainTextResponse(f"Queued job {job_id}", status_code=202)
