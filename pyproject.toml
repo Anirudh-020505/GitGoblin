@@ -31,6 +31,9 @@ dev = [
 
 [tool.alembic]
 script_location = "%(here)s/gitgoblin/db/migrations"
+# Put the repo root on sys.path so env.py can `import gitgoblin` even when the
+# editable install isn't picked up (e.g. macOS hides .venv files on iCloud Desktop).
+prepend_sys_path = ["."]
 # Date-prefixed files sort in the order they were written.
 file_template = "%%(year)d_%%(month).2d_%%(day).2d-%%(rev)s_%%(slug)s"
 
