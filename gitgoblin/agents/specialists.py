@@ -1,11 +1,12 @@
-"""Review specialists. Each one is data (prompt + task + fallback) run by the same code."""
+"""Review specialists. Each one is data (prompt + task) run by the same code.
 
-import logging
+Errors propagate: the worker retries the whole job with backoff, so a flaky model
+call never turns into a half-broken review comment.
+"""
+
 from dataclasses import dataclass
 
 from gitgoblin import llm
-
-log = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -13,15 +14,9 @@ class Specialist:
     name: str
     system_prompt: str
     task: str
-    failure_message: str
 
     async def review(self, diff: str) -> str:
-        """Review a diff; on any model error, return the failure message instead of raising."""
-        try:
-            return await llm.generate(self.system_prompt, f"{self.task}\n\n{diff}")
-        except Exception:
-            log.exception("%s failed", self.name)
-            return self.failure_message
+        return await llm.generate(self.system_prompt, f"{self.task}\n\n{diff}")
 
 
 SECURITY = Specialist(
@@ -39,7 +34,6 @@ Format your response in sleek, professional Markdown.
 - Provide secure code examples or remediation steps.
 - If no issues are found, reply with: "🛡️ **No obvious security vulnerabilities detected. LGTM!**\"""",
     task="Analyze this code diff for security vulnerabilities:",
-    failure_message="⚠️ *Security analysis failed.*",
 )
 
 PERFORMANCE = Specialist(
@@ -57,5 +51,4 @@ Format your response in sleek, professional Markdown.
 - Provide optimized code examples where applicable.
 - If no issues are found, reply with: "🚀 **Performance looks highly optimized. LGTM!**\"""",
     task="Analyze this code diff for performance improvements:",
-    failure_message="⚠️ *Performance analysis failed.*",
 )

@@ -6,12 +6,12 @@ from openai import AsyncOpenAI
 from openai.types.chat import ChatCompletionMessageParam
 
 from gitgoblin.models import ChatTurn
-from gitgoblin.settings import get_settings
+from gitgoblin.settings import llm_settings
 
 
 @lru_cache(maxsize=1)
 def _client() -> AsyncOpenAI:
-    settings = get_settings()
+    settings = llm_settings()
     return AsyncOpenAI(
         api_key=settings.llm_api_key.get_secret_value(),
         base_url=settings.llm_base_url,
@@ -31,7 +31,7 @@ async def generate(
     messages.append({"role": "user", "content": prompt})
 
     response = await _client().chat.completions.create(
-        model=get_settings().llm_model,
+        model=llm_settings().llm_model,
         messages=messages,
         **({"temperature": temperature} if temperature is not None else {}),
     )

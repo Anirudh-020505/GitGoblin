@@ -12,7 +12,7 @@ from contextlib import asynccontextmanager
 import httpx
 import jwt
 
-from gitgoblin.settings import get_settings
+from gitgoblin.settings import github_settings
 
 API_URL = "https://api.github.com"
 BASE_HEADERS = {
@@ -23,7 +23,7 @@ BASE_HEADERS = {
 
 
 def _app_jwt() -> str:
-    settings = get_settings()
+    settings = github_settings()
     now = int(time.time())
     private_key = settings.github_private_key.get_secret_value().replace("\\n", "\n")
     claims = {"iat": now - 60, "exp": now + 540, "iss": settings.github_app_id}
